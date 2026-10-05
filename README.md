@@ -1,60 +1,148 @@
-# MONA Pay Elixir SDK
+# monapay
 
-Hex package stdlib-only dùng `GenServer`, `:httpc`, `:crypto` và JSON codec nội bộ. MONA Pay là API ngân hàng và dịch vụ xác nhận thanh toán tự động của The MONA Group, giúp doanh nghiệp Việt Nam nhận và xác nhận tiền chuyển khoản theo thời gian thực qua tài khoản ảo (VA), VietQR, webhook và Telegram, thiết kế để cả lập trình viên lẫn AI agent tích hợp trong vài phút.
+Elixir SDK for the MONA Pay API: create checkout links and VietQR codes, manage virtual accounts, webhooks and email notifications, and verify signed webhooks.
 
-## Xác thực cho AI agent
+Requires Elixir 1.12+. No Hex dependencies: the client is a `GenServer` built on `:httpc`, `:crypto` and an internal JSON codec.
 
-```bash
-export MONAPAY_CLIENT_ID="client-id"
-export MONAPAY_CLIENT_SECRET="client-secret"
-export MONAPAY_BASE_URL="https://api.monapay.vn"
-```
+## Install
+
+The package is not on Hex yet. Until it is, install it from GitHub:
 
 ```elixir
-{:ok, client} = MonaPay.from_env()
-{:ok, profile} = MonaPay.me(client)
-{:ok, qr} = MonaPay.QR.generate(client, qr_body)
-{:ok, sandbox} = MonaPay.Sandbox.create_transaction(client, %{"virtual_account_number" => "MONA123", "amount" => 10_000, "description" => "AI test"})
-IO.inspect(profile)
-```
-
-`MonaPay.from_env/1` ưu tiên client credentials, cache token tới gần hạn và tự lấy lại khi gặp HTTP 401. Username/password chỉ là fallback tương thích cũ, không dùng cho AI agent vì sẽ gãy khi bật 2FA.
-
-```elixir
-{:ok, client} = MonaPay.start_link(
-  username: System.fetch_env!("MONAPAY_USERNAME"),
-  password: System.fetch_env!("MONAPAY_PASSWORD"),
-  client_secret: System.get_env("MONAPAY_CLIENT_SECRET")
-)
-
-{:ok, profile} = MonaPay.me(client)
-
-client
-|> MonaPay.Transactions.stream("MONA123")
-|> Enum.each(&IO.inspect(&1["transaction_code"]))
-```
-
-Client process cache token theo hạn, refresh đúng một lần sau HTTP 401 và chỉ gắn `X-Client-Secret` vào POST/PUT/DELETE. Các resource module gồm `Keys`, `PaymentProfile`, `Checkouts`, `VirtualAccounts`, `BankAccounts`, `QR`, `Transactions`, `Webhooks`, `WebhookLogs`, `Sandbox`, `EmailConfigs`, `EmailLogs`, `EmailSuppressions` dưới namespace `MonaPay`.
-
-## Trang thanh toán (hosted checkout)
-
-```elixir
-{:ok, checkout} = MonaPay.Checkouts.create(client, %{"amount" => 250_000, "order_code" => "DH10234", "return_url" => "https://shop.vn/payment/return"})
-redirect(conn, external: checkout["checkout_url"])
-if event["type"] == "CHECKOUT_PAID" do
-  fulfill_once(event["data"]["order_code"])
+# mix.exs
+def deps do
+  [{:monapay, github: "mona-software/monapay-elixir"}]
 end
 ```
 
-SDK tự sinh `Idempotency-Key` cho `create` và `cancel`; truyền `idempotency_key:` khi anh chị cần dùng key riêng. Nguồn sự thật để giao hàng là webhook `CHECKOUT_PAID` hoặc kết quả `get`, không phải redirect trình duyệt.
+Once it is published on Hex:
+
+```elixir
+# mix.exs
+def deps do
+  [{:monapay, "~> 0.4"}]
+end
+```
+
+## Quick start
+
+```elixir
+{:ok, client} = MonaPay.from_env()
+
+{:ok, checkout} =
+  MonaPay.Checkouts.create(client, %{
+    "amount" => 250_000,
+    "order_code" => "DH10234",
+    "return_url" => "https://shop.example/payment/return"
+  })
+
+IO.puts(checkout["checkout_url"])
+```
+
+## Usage
+
+### Client
+
+```elixir
+# From environment variables (see Configuration); options passed here override them
+{:ok, client} = MonaPay.from_env()
+
+# Or explicitly
+{:ok, client} =
+  MonaPay.start_link(
+    client_id: System.fetch_env!("MONAPAY_CLIENT_ID"),
+    client_secret: System.fetch_env!("MONAPAY_CLIENT_SECRET")
+    # optional: base_url:
+  )
+
+{:ok, profile} = MonaPay.me(client)
+```
+
+- Client credentials (`client_id` + `client_secret`) are the recommended login. `username:`/`password:` is a legacy fallback and does not work for accounts with 2FA enabled.
+- The client process caches the token until 60 seconds before `expires_in`. A request that fails with HTTP 401 triggers a new login and is retried once.
+- `X-Client-Secret` is sent on non-GET requests when a client secret is set.
+- Calls return `{:ok, data}` with the `data` field of the response, or `{:error, %MonaPay.Error{message, status, body}}`.
+- `MonaPay.child_spec/1` lets you start the client under a supervisor.
+
+### Resources
+
+Each module under the `MonaPay` namespace takes the client pid as its first argument. The same calls are also available as functions on `MonaPay` itself (for example `MonaPay.create_checkout/3`).
+
+| Module | Functions |
+| --- | --- |
+| `MonaPay.Keys` | `generate`, `list`, `destroy`, `reveal`, `rotate` |
+| `MonaPay.BankAccounts` | `list` |
+| `MonaPay.VirtualAccounts` | `register`, `verify`, `register_notification`, `verify_notification`, `list` |
+| `MonaPay.PaymentProfile` | `get`, `set`, `rotate_return_secret`, `reveal_return_secret` |
+| `MonaPay.Checkouts` | `create`, `get`, `list`, `cancel` |
+| `MonaPay.QR` | `generate`, `cancel` |
+| `MonaPay.Transactions` | `list`, `stream`, `retry` |
+| `MonaPay.Sandbox` | `create_transaction` |
+| `MonaPay.Webhooks` | `list`, `create`, `update`, `remove`, `test` |
+| `MonaPay.WebhookLogs` | `list`, `stats` |
+| `MonaPay.EmailConfigs` | `list`, `create`, `get`, `update`, `remove`, `verify`, `resend_verification`, `test` |
+| `MonaPay.EmailLogs` | `list`, `stats` |
+| `MonaPay.EmailSuppressions` | `list`, `remove` |
+
+### Hosted checkout
+
+`MonaPay.Checkouts.create` and `cancel` send an `Idempotency-Key` header generated by the SDK; pass `idempotency_key:` to set your own. Fulfil orders from the `CHECKOUT_PAID` webhook or from `MonaPay.Checkouts.get`, not from the browser redirect.
+
+### Sandbox
+
+```elixir
+{:ok, tx} =
+  MonaPay.Sandbox.create_transaction(client, %{
+    "virtual_account_number" => "MONA123",
+    "amount" => 10_000,
+    "description" => "Sandbox test"
+  })
+```
+
+### Transactions
+
+```elixir
+client
+|> MonaPay.Transactions.stream("MONA123", limit: 100)
+|> Enum.each(&IO.inspect(&1["transaction_code"]))
+```
+
+`stream` also accepts `since_id:`; the stream stops before the item whose `id` or `transaction_code` matches. It is not sent to the API.
+
+### Webhooks
+
+Verify the raw request bytes before parsing. `timestamp` and `signature` are the `X-Mona-Timestamp` and `X-Mona-Signature` header values.
 
 ```elixir
 result = MonaPay.verify_webhook(raw_body, timestamp, signature, webhook_secret)
 unless result.ok, do: raise("invalid webhook: #{result.reason}")
 ```
 
-Verifier dùng `:crypto.mac(:hmac, :sha256, ...)`, so sánh fixed-time và tolerance mặc định 300 giây. Luôn xác minh raw bytes trước khi parse; dùng `transaction_code` làm khóa idempotency. Ví dụ Phoenix ở `examples/phoenix_webhook_controller.ex`.
+The verifier uses `:crypto.mac(:hmac, :sha256, ...)`, compares in constant time, and accepts timestamps within the tolerance (fifth argument, default 300 seconds). Use `transaction_code` as the idempotency key. A Phoenix controller is in `examples/phoenix_webhook_controller.ex`.
 
-Gate offline: `mix format --check-formatted`, `mix test`, `mix hex.build`. Package không có dependency Hex. Tài liệu: https://monapay.vn/docs · Hotline 1900 636 648 · info@themona.global.
+## Configuration
 
-**MONA Pay thuộc bộ MONA Cloud của The MONA Group.**
+`MonaPay.from_env/1` reads:
+
+| Variable | Purpose |
+| --- | --- |
+| `MONAPAY_CLIENT_ID`, `MONAPAY_CLIENT_SECRET` | API key credentials (recommended) |
+| `MONAPAY_USERNAME`, `MONAPAY_PASSWORD` | Legacy password login; does not work for accounts with 2FA enabled |
+| `MONAPAY_BASE_URL` | API base URL, defaults to `https://api.monapay.vn` |
+
+The HTTP transport also honours `SSL_CERT_FILE` for the CA bundle. The Phoenix example reads `MONAPAY_WEBHOOK_SECRET`.
+
+Documentation: https://monapay.vn/docs
+
+## Development
+
+```bash
+mix format --check-formatted
+mix test
+```
+
+## License
+
+MIT
+
+**MONA Pay is part of MONA Cloud by The MONA Group.**

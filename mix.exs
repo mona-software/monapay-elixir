@@ -23,6 +23,7 @@ defmodule MonaPay.MixProject do
     [
       licenses: ["MIT"],
       links: %{
+        "MONA Pay" => "https://monapay.vn",
         "MONA Pay Docs" => "https://monapay.vn/docs",
         "Source" => "https://github.com/mona-software/monapay-elixir"
       },
