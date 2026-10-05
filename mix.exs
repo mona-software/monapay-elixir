@@ -10,7 +10,7 @@ defmodule MonaPay.MixProject do
       deps: [],
       description: "SDK Elixir stdlib-only cho MONA Pay",
       package: package(),
-      source_url: "https://github.com/themonagroup/monapay-elixir",
+      source_url: "https://github.com/mona-software/monapay-elixir",
       homepage_url: "https://monapay.vn/docs"
     ]
   end
@@ -24,7 +24,7 @@ defmodule MonaPay.MixProject do
       licenses: ["MIT"],
       links: %{
         "MONA Pay Docs" => "https://monapay.vn/docs",
-        "Source" => "https://github.com/themonagroup/monapay-elixir"
+        "Source" => "https://github.com/mona-software/monapay-elixir"
       },
       files: ~w(lib mix.exs README.md CHANGELOG.md LICENSE SECURITY.md examples)
     ]

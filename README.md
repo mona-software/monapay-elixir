@@ -56,3 +56,5 @@ unless result.ok, do: raise("invalid webhook: #{result.reason}")
 Verifier dùng `:crypto.mac(:hmac, :sha256, ...)`, so sánh fixed-time và tolerance mặc định 300 giây. Luôn xác minh raw bytes trước khi parse; dùng `transaction_code` làm khóa idempotency. Ví dụ Phoenix ở `examples/phoenix_webhook_controller.ex`.
 
 Gate offline: `mix format --check-formatted`, `mix test`, `mix hex.build`. Package không có dependency Hex. Tài liệu: https://monapay.vn/docs · Hotline 1900 636 648 · info@themona.global.
+
+**MONA Pay thuộc bộ MONA Cloud của The MONA Group.**
